@@ -1,0 +1,108 @@
+pragma solidity ^0.5.0;
+import "@etherisc/gif/contract/Product.sol";
+contract NodeInsurance is Product {
+bytes32 public constant NAME = "NodeInsurance";
+bytes32 public constant POLICY_FLOW = "PolicyFlowDefault"; 
+bytes32 public constant CURRENCY = "EUR";
+//Need to call the address 
+
+constructor(address _productService)
+ public
+ Product(_productService, NAME, POLICY_FLOW)
+ {
+ _createRole("applicationManager");
+ _createRole("underwriter");
+ _createRole("claimsManager");
+ _createRole("bookkeeper");
+ _addRoleToAccount(msg.sender, "applicationManager");
+ _addRoleToAccount(msg.sender, "underwriter");
+ _addRoleToAccount(msg.sender, "claimsManager");
+ _addRoleToAccount(msg.sender, "bookkeeper");
+ }
+}
+
+function getQuote(uint256 _price) public pure returns (uint256 _premium) {
+  require(_price > 0, "ERROR::INVALID PRICE");
+  _premium = _price.div(10);
+}
+
+//Uptime, reward call, and amount staked (stake_amt) as the factor that are the risk parameters for the main service.  
+struct Risk {
+ bytes32 stake_amt;
+ bytes32 experience;
+ uint256 uptime;
+}
+mapping(bytes32 => Risk) public risks;
+
+function calculatePremium(uint256 _price) view returns (uint256 _premium) {
+  require(_price > 0, "ERROR::INVALID PRICE");
+  _premium = _price * 10 / 100;
+}
+
+
+function applyForPolicy(
+ bytes32 stake_amt,
+ bytes32 experience,
+ uint256 uptime,
+ bytes32 _serialNumber,
+ uint256 _price,
+ uint256 _premium,
+ bytes32 _currency,
+ bytes32 _customerExternalId
+) external onlyWithRole("applicationManager") {
+ require(_premium > 0, "ERROR:INVALID_PREMIUM");
+ require(calculatePremium(_price) == _premium, "ERROR::INVALID_PREMIUM");
+ require(_currency == CURRENCY, "ERROR::INVALID_CURRENCY");
+ 
+ bytes32 riskId = keccak256(abi.encodePacked(stake_amt, experience, uptime));
+ risks[riskId] = Risk(stake_amt, experience, uptime);
+ 
+ uint256[] memory payoutOptions = new uint256[](1);
+ payoutOptions[0] = _price;
+ 
+ uint256 applicationId = _newApplication(_customerExternalId, riskId, _premium, _currency, payoutOptions);
+ 
+ emit LogRequestUnderwriter(applicationId);
+}
+
+
+function underwriteApplication(uint256 _applicationId) external onlyWithRole("underwriter") {
+ uint256 policyId = _underwrite(_applicationId);
+ emit LogApplicationUnderwritten(_applicationId, policyId);
+}
+
+function declineApplication(uint256 _applicationId) external onlyWithRole("underwriter") {
+ _decline(_applicationId);
+ emit LogApplicationDeclined(_applicationId);
+}
+
+function createClaim(uint256 _policyId) external onlyWithRole("applicationManager") {
+ uint256 claimId = _newClaim(_policyId);
+ emit LogRequestclaimsManager(_policyId, claimId);
+}
+
+function confirmClaim(uint256 _applicationId, uint256 _claimId) external onlyWithRole("claimsManager") {
+ uint256[] memory payoutOptions = _getPayoutOptions(_applicationId);
+ uint256 payoutId = _confirmClaim(_claimId, payoutOptions[0]);
+ emit LogRequestPayout(payoutId);
+}
+
+function confirmPayout(uint256 _claimId, uint256 _amount) external
+ onlyWithRole("bookkeeper") {
+ _payout(_claimId, _amount);
+
+ emit LogPayout(_claimId, _amount);
+}
+
+#events 
+
+event LogRequestUnderwriter(uint256 applicationId);
+event LogApplicationUnderwritten(uint256 applicationId, uint256 policyId);
+event LogApplicationDeclined(uint256 applicationId);
+event LogRequestClaimsManager(uint256 policyId, uint256 claimId);
+event LogClaimDeclined(uint256 claimId);
+event LogRequestPayout(uint256 payoutId);
+event LogPayout(uint256 claimId, uint256 amount);
+bytes32 public constant NAME = "NodeInsurance";
+
+ 
