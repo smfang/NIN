@@ -1,3 +1,3 @@
 # NIN
 
-Test contracts for a Node Insurance Product.  
+Test contracts for node insurance product base on GIF implementation 
